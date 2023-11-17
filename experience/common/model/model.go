@@ -14,17 +14,12 @@
 
 package model
 
-import (
-	"github.com/ecodeclub/notify-go/experience/common/enum"
-	"reflect"
-)
-
-// GetChanelModelClassByCode 通过code获取class
-func GetChanelModelClassByCode(code int) reflect.Type {
-	for _, channelType := range enum.ChannelTypes {
-		if code == channelType.Code {
-			return channelType.ContentModelClass
-		}
-	}
-	return nil
-}
+//// GetChanelModelClassByCode 通过code获取class
+//func GetChanelModelClassByCode(code int) reflect.Type {
+//	for _, channelType := range enum.ChannelTypes {
+//		if code == channelType.Code {
+//			return channelType.ContentModelClass
+//		}
+//	}
+//	return nil
+//}
