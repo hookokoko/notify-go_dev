@@ -33,9 +33,10 @@ func (te *TaskExecutor) run(info *domain.TaskInfo) error {
 	//)
 	//err := processController.Process(ctx, info)
 
+	send := NewSendMsgHandlerBuilder().Build()
 	processPipeline := pipeline.FilterChain[*domain.TaskInfo](
 		NewDiscardFilterBuilder().Build(),
-	).Then(NewSendMsgHandlerBuilder().Build())
+	).Then(send)
 
 	err := processPipeline(ctx, info)
 	return err

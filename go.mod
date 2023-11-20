@@ -38,6 +38,8 @@ require (
 	github.com/jcmturner/gofork v1.7.6 // indirect
 	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/go-types v0.0.0-20210723172823-2deba1f80ba7 // indirect
 	github.com/kevinburke/rest v0.0.0-20210506044642-5611499aa33c // indirect
@@ -59,5 +61,8 @@ require (
 	golang.org/x/text v0.13.0 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gorm.io/driver/mysql v1.5.2 // indirect
+	gorm.io/gorm v1.25.5 // indirect
+	gorm.io/plugin/soft_delete v1.2.1 // indirect
 	xorm.io/builder v0.3.11-0.20220531020008-1bd24a7dc978 // indirect
 )
