@@ -1,24 +1,14 @@
-// Copyright 2021 ecodeclub
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package experience
 
 import (
 	"context"
-	"github.com/ecodeclub/ekit/bean/option"
-	"github.com/pborman/uuid"
+	"fmt"
 	"strings"
+
+	"github.com/ecodeclub/ekit/bean/option"
+	"github.com/ecodeclub/notify-go/experience/common/domain"
+	"github.com/ecodeclub/notify-go/experience/common/pipeline"
+	"github.com/pborman/uuid"
 )
 
 // Delivery {"code":"send","messageParam": {"bizId":null,"extra":null,"receiver":"123@qq.com","variables":null},"messageTemplateId":17,"recallMessageId":null}
@@ -28,10 +18,8 @@ type Delivery struct {
 	// 请求参数
 	MessageParamList []MessageParam `json:"message_param_list"`
 	// 发送任务的信息
-	TaskInfo []TaskInfo `json:"task_info"`
-	// 发送方式，默认异步
-	IsSync      bool
-	SendService SendService
+	TaskInfo    []domain.TaskInfo `json:"task_info"`
+	sendService SendService
 }
 
 type MessageParam struct {
@@ -45,118 +33,98 @@ type MessageParam struct {
 	Extra map[string]string `json:"extra"`
 }
 
-type TaskInfo struct {
-	//业务消息发送Id, 用于链路追踪, 若不存在, 则使用 messageId
-	BizId string `json:"biz_id"`
-	//消息唯一Id(数据追踪使用)
-	MessageId string `json:"message_id"`
-	//消息模板Id
-	MessageTemplateId int `json:"message_template_id"`
-	//业务Id(数据追踪使用)
-	BusinessId int `json:"business_id"`
-	//接收者
-	Receiver []string `json:"receiver"`
-	//发送的Id类型
-	IdType int `json:"id_type"`
-	//发送渠道
-	SendChannel int `json:"send_channel"`
-	//模板类型
-	TemplateType int `json:"template_type"`
-	//消息类型
-	MsgType int `json:"msg_type"`
-	// 屏蔽类型
-	ShieldType int `json:"shield_type"`
-	// 发送文案, 似乎不需要转成对应channel的struct
-	// message_template表存储的content是JSON(所有内容都会塞进去)
-	Content string `json:"content"`
-	// 发送账号（邮件下可有多个发送账号、短信可有多个发送账号..）
-	SendAccount int `json:"send_account"`
-}
-
-func WithIsSync(isSync bool) option.Option[Delivery] {
+func WithSendService(srv SendService) option.Option[Delivery] {
 	return func(d *Delivery) {
-		d.IsSync = isSync
+		d.sendService = srv
 	}
 }
 
-func NewDelivery(messageParamList []MessageParam, opts ...option.Option[Delivery]) Delivery {
+func NewDelivery(messageParamList []MessageParam, templateId int, opts ...option.Option[Delivery]) Delivery {
 	d := Delivery{
-		MessageParamList: messageParamList,
-		TaskInfo:         make([]TaskInfo, 0),
+		MessageTemplateId: templateId,
+		MessageParamList:  messageParamList,
+		TaskInfo:          make([]domain.TaskInfo, 0),
+		sendService:       NewDefaultSendImpl(),
 	}
 	option.Apply[Delivery](&d, opts...)
-
-	if d.IsSync {
-		d.SendService = NewSendSyncService()
-	} else {
-		d.SendService = NewSendAsyncService()
-	}
-
 	return d
 }
 
-type SendFunc func(context.Context, *Delivery) error
+func (deli *Delivery) Send(ctx context.Context, filters ...pipeline.Filter[*Delivery]) error {
+	filters = append(filters, preCheck, assemble, afterCheck)
+	sendHandlerFunc := NewSendFuncBuilder().Build()
+	processPipeline := pipeline.FilterChain[*Delivery](filters...).Then(sendHandlerFunc)
+	err := processPipeline(ctx, deli)
+	return err
+}
 
-type SendMiddleware func(SendFunc) SendFunc
-
-func (deli *Delivery) Send(ctx context.Context, mls ...SendMiddleware) error {
-	// 前置检查
-	var preCheck SendMiddleware = func(next SendFunc) SendFunc {
-		return func(ctx context.Context, deli *Delivery) error {
-			// 这里可以干点啥
-			err := next(ctx, deli)
-			// 这里也可以干点啥
-			return err
-		}
-	}
-
-	// 组装发送参数
-	var assemble SendMiddleware = func(next SendFunc) SendFunc {
-		return func(ctx context.Context, deli *Delivery) error {
-			template := MessageTemplate{} // TODO getFrom(deli.MessageTemplateId)
-			// 所有的taskinfo一起序列化，一起发送
-			for _, messageParam := range deli.MessageParamList {
-				taskInfo := TaskInfo{
-					BizId:             messageParam.BizId,
-					MessageId:         uuid.NewUUID().String(), // 生成唯一id
-					MessageTemplateId: deli.MessageTemplateId,
-					BusinessId:        0, // TODO 根据模版类型和当天日期生成
-					Receiver:          strings.Split(messageParam.Receiver, ","),
-					IdType:            template.IDType,
-					SendChannel:       template.SendChannel,
-					TemplateType:      template.TemplateType,
-					MsgType:           template.MsgType,
-					ShieldType:        template.ShieldType,
-					SendAccount:       template.SendAccount,
-					Content:           ReplacePlaceHolder(template.MsgContent, messageParam.Variables),
-				}
-				deli.TaskInfo = append(deli.TaskInfo, taskInfo)
-			}
-			return next(ctx, deli)
-		}
-	}
-
-	// 后置检查
-	var afterCheck SendMiddleware = func(next SendFunc) SendFunc {
-		return func(ctx context.Context, deli *Delivery) error {
-			return next(ctx, deli)
-		}
-	}
-
-	// 消息实际发送
-	var send SendFunc = func(ctx context.Context, deli *Delivery) error {
-		err := deli.SendService.Send(ctx, deli.TaskInfo)
+// 前置检查
+var preCheck pipeline.Filter[*Delivery] = func(next pipeline.HandlerFunc[*Delivery]) pipeline.HandlerFunc[*Delivery] {
+	return func(ctx context.Context, deli *Delivery) error {
+		fmt.Println("pre check begin")
+		err := next(ctx, deli)
+		fmt.Println("pre check end")
 		return err
 	}
+}
 
-	// 构造调用链
-	// (...(preCheck(assemble(afterCheck(send)))))
-	totalMls := append([]SendMiddleware{afterCheck, assemble, preCheck}, mls...)
-
-	// 组装其他中间件
-	for i := len(totalMls) - 1; i > 0; i-- {
-		send = mls[i](send)
+// 组装发送参数
+var assemble pipeline.Filter[*Delivery] = func(next pipeline.HandlerFunc[*Delivery]) pipeline.HandlerFunc[*Delivery] {
+	return func(ctx context.Context, deli *Delivery) error {
+		fmt.Println("assemble begin")
+		template := MessageTemplate{
+			ID:          111233,
+			Name:        "测试模版名",
+			IDType:      50,
+			SendChannel: 30,
+			MsgContent:  `${name}先生/女士,你好，这是一条短信内容哦`,
+		} // TODO getFrom(deli.MessageTemplateId)
+		// 所有的taskinfo一起序列化，一起发送
+		for _, messageParam := range deli.MessageParamList {
+			taskInfo := domain.TaskInfo{
+				BizId:             messageParam.BizId,
+				MessageId:         uuid.NewUUID().String(), // 生成唯一id
+				MessageTemplateId: deli.MessageTemplateId,
+				BusinessId:        0, // TODO 根据模版类型和当天日期生成
+				Receiver:          strings.Split(messageParam.Receiver, ","),
+				IdType:            template.IDType,
+				SendChannel:       template.SendChannel,
+				TemplateType:      template.TemplateType,
+				MsgType:           template.MsgType,
+				ShieldType:        template.ShieldType,
+				SendAccount:       template.SendAccount,
+				Content:           ReplacePlaceHolder(template.MsgContent, messageParam.Variables),
+			}
+			deli.TaskInfo = append(deli.TaskInfo, taskInfo)
+		}
+		err := next(ctx, deli)
+		fmt.Println("assemble end")
+		return err
 	}
+}
 
-	return send(ctx, deli)
+// 后置检查
+var afterCheck pipeline.Filter[*Delivery] = func(next pipeline.HandlerFunc[*Delivery]) pipeline.HandlerFunc[*Delivery] {
+	return func(ctx context.Context, deli *Delivery) error {
+		fmt.Println("after check begin")
+		err := next(ctx, deli)
+		fmt.Println("after check end")
+		return err
+	}
+}
+
+type SendFuncBuilder struct {
+}
+
+func NewSendFuncBuilder() *SendFuncBuilder {
+	return &SendFuncBuilder{}
+}
+
+func (sb *SendFuncBuilder) Build() pipeline.HandlerFunc[*Delivery] {
+	return func(ctx context.Context, object *Delivery) error {
+		fmt.Println("send begin")
+		err := object.sendService.Send(ctx, object.TaskInfo)
+		fmt.Println("send end")
+		return err
+	}
 }

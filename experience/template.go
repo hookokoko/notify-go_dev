@@ -1,17 +1,3 @@
-// Copyright 2021 ecodeclub
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package experience
 
 import (
@@ -39,7 +25,7 @@ type MessageTemplate struct {
 	ShieldType     int    `json:"shield_type"`      // 屏蔽类型 10.夜间不屏蔽 20.夜间屏蔽 30.夜间屏蔽(次日早上9点发送)
 	MsgType        int    `json:"msg_type"`         // 消息类型 10.通知类消息 20.营销类消息 30.验证码类消息
 	ExpectPushTime string `json:"expect_push_time"` // 推送消息的时间, 0: 立即发送, else: crontab 表达式
-	MsgContent     string `json:"msg_content"`      // 消息内容 占位符用{$var}表示
+	MsgContent     string `json:"msg_content"`      // 消息内容 占位符用${var}表示
 	SendAccount    int    `json:"send_account"`     // 发送账号 一个渠道下可存在多个账号
 	Creator        string `json:"creator"`          // 创建者
 	Updater        string `json:"updater"`          // 更新者
