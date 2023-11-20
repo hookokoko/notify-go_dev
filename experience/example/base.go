@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ecodeclub/notify-go/experience"
+	"github.com/ecodeclub/notify-go/experience/storage"
 )
 
 func main() {
@@ -20,7 +21,7 @@ func main() {
 	//d := experience.NewDelivery(params, 123,
 	//	experience.WithSendService(experience.NewKafkaSendService(kafka.Kafka{Hosts: []string{"127.0.0.1:9092"}})))
 
-	d := experience.NewDelivery(params, 123)
+	d := experience.NewNotification(params, 123, storage.MysqlDB())
 
 	err := d.Send(context.Background())
 	if err != nil {
