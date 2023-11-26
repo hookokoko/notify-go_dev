@@ -1,55 +1,70 @@
-// Copyright 2021 ecodeclub
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package notify_go
+package notify_go_dev
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/ecodeclub/notify-go/pkg/notifier"
-	"github.com/pborman/uuid"
+	"github.com/ecodeclub/ekit/bean/option"
+	"github.com/ecodeclub/notify-go/common/domain"
+	"github.com/ecodeclub/notify-go/common/pipeline"
+	"gorm.io/gorm"
 )
 
 type Notification struct {
-	notifier.Delivery
-	Channel notifier.IChannel
+	db          *gorm.DB
+	sendService SendService
+	Delivery
 }
 
-type ChannelFunc func(ctx context.Context, no *Notification) error
-
-type Middleware func(channelFunc ChannelFunc) ChannelFunc
-
-func (no *Notification) Send(ctx context.Context, mls ...Middleware) error {
-	var root ChannelFunc = func(ctx context.Context, no *Notification) error {
-		return no.Channel.Execute(ctx, no.Delivery)
+func WithSendService(srv SendService) option.Option[Notification] {
+	return func(d *Notification) {
+		d.sendService = srv
 	}
-
-	for i := len(mls) - 1; i > 0; i-- {
-		root = mls[i](root)
-	}
-
-	return root(ctx, no)
 }
 
-func NewNotification(c notifier.IChannel, recvs []notifier.Receiver, content notifier.Content) *Notification {
-	no := &Notification{
-		Channel: c,
-		Delivery: notifier.Delivery{
-			DeliveryID: uuid.NewUUID().String(),
-			Receivers:  recvs,
-			Content:    content,
+func NewNotification(messageParamList []MessageParam, templateId int, db *gorm.DB,
+	opts ...option.Option[Notification]) Notification {
+	n := Notification{
+		Delivery: Delivery{
+			MessageTemplateId: templateId,
+			MessageParamList:  messageParamList,
+			TaskInfo:          make([]domain.TaskInfo, 0),
 		},
+		sendService: NewDefaultSendImpl(),
+		db:          db,
 	}
-	return no
+
+	option.Apply[Notification](&n, opts...)
+	return n
+}
+
+func (ni *Notification) Send(ctx context.Context, filters ...pipeline.Filter[*Delivery]) error {
+	filters = append(filters,
+		preCheck,
+		NewAssembleFilterBuilder(ni.db).Build(),
+		afterCheck,
+	)
+	send := NewSendFuncBuilder(ni.sendService).Build()
+	processPipeline := pipeline.FilterChain[*Delivery](filters...).Then(send)
+	err := processPipeline(ctx, &ni.Delivery)
+	return err
+}
+
+type SendFuncBuilder struct {
+	service SendService
+}
+
+func NewSendFuncBuilder(srv SendService) *SendFuncBuilder {
+	return &SendFuncBuilder{
+		service: srv,
+	}
+}
+
+func (sb *SendFuncBuilder) Build() pipeline.HandlerFunc[*Delivery] {
+	return func(ctx context.Context, object *Delivery) error {
+		fmt.Println("send begin")
+		err := sb.service.Send(ctx, object.TaskInfo)
+		fmt.Println("send end")
+		return err
+	}
 }
