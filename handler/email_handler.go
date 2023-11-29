@@ -11,18 +11,17 @@ import (
 	"github.com/ecodeclub/notify-go/common/domain"
 	"github.com/ecodeclub/notify-go/common/enum/channel_type"
 	"github.com/ecodeclub/notify-go/repo"
-	"github.com/ecodeclub/notify-go/storage"
 	"github.com/jordan-wright/email"
 	"gorm.io/gorm"
 )
 
 var once *sync.Once
 
-func init() {
-	once.Do(func() {
-		handlerHolder.put(channel_type.EMAIL.String(), NewEmailHandler(storage.MysqlDB()))
-	})
-}
+//func init() {
+//	once.Do(func() {
+//		handlerHolder.put(channel_type.EMAIL.String(), NewEmailHandler(storage.MysqlDB()))
+//	})
+//}
 
 type EmailHandler struct {
 	channelCode channel_type.ChannelType
