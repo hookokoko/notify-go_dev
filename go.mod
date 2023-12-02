@@ -11,6 +11,8 @@ require (
 	github.com/panjf2000/ants/v2 v2.8.2
 	github.com/pborman/uuid v1.2.0
 	github.com/pkg/errors v0.8.1
+	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.808
+	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/sms v1.0.808
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/gorm v1.25.5
 	gorm.io/plugin/soft_delete v1.2.1

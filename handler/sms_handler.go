@@ -44,6 +44,10 @@ func (s *SMSHandler) Do(ctx context.Context, taskInfo domain.TaskInfo) bool {
 
 func (s *SMSHandler) handle(ctx context.Context, taskInfo domain.TaskInfo) bool {
 	fmt.Println(">>>>>>>> sms handler")
+	var (
+		account *repo.ChannelAccount
+		err     error
+	)
 	smsParam := sms.SmsParam{
 		Phones:            taskInfo.Receiver,
 		Content:           s.getSMSContent(taskInfo),
@@ -53,6 +57,18 @@ func (s *SMSHandler) handle(ctx context.Context, taskInfo domain.TaskInfo) bool 
 	messageTypeSmsConfig := s.loadBalance(s.getMessageTypeSmsConfig(ctx, taskInfo))
 	smsParam.SendAccountId = messageTypeSmsConfig.SendAccount
 	smsParam.ScriptName = messageTypeSmsConfig.ScriptName
+
+	// 获取账号配置
+	if smsParam.SendAccountId != 0 {
+		account, err = s.channelAccountDao.FindById(ctx, smsParam.SendAccountId)
+	} else {
+		account, err = s.channelAccountDao.GetAccountConfigByScriptName(ctx, messageTypeSmsConfig.ScriptName)
+	}
+	if err != nil {
+		fmt.Println("smsParam.SendAccountId!= 0 && account, err!= nil:", err)
+		return false
+	}
+	smsParam.AccountConfig = account.AccountConfig
 
 	if handler, ok := script.SmsScriptHandler[messageTypeSmsConfig.ScriptName]; ok {
 		records := handler.Send(ctx, smsParam)

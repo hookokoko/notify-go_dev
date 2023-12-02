@@ -9,6 +9,8 @@ import (
 
 var SmsScriptHandler = map[string]SMSScript{
 	"Tencent": &impl.TencentSmsScript{},
+	"Ali":     &impl.AliSmsScript{},
+	"Yunpian": &impl.YunpianSmsScript{},
 }
 
 type SMSScript interface {

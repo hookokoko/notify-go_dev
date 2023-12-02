@@ -33,6 +33,7 @@ type IChannelAccountDao interface {
 	Update(ctx context.Context, account *ChannelAccount) error
 	Delete(ctx context.Context, id int) error
 	FindById(ctx context.Context, id int) (*ChannelAccount, error)
+	GetAccountConfigByScriptName(ctx context.Context, scriptName string) (*ChannelAccount, error)
 }
 
 func NewChannelAccountDao(db *gorm.DB) IChannelAccountDao {
@@ -55,6 +56,11 @@ func (c *channelAccountDao) Delete(ctx context.Context, id int) error {
 }
 
 func (c *channelAccountDao) FindById(ctx context.Context, id int) (*ChannelAccount, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *channelAccountDao) GetAccountConfigByScriptName(ctx context.Context, scriptName string) (*ChannelAccount, error) {
 	//TODO implement me
 	panic("implement me")
 }

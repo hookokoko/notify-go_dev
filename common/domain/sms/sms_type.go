@@ -6,6 +6,7 @@ type SmsParam struct {
 	SendAccountId     int      `json:"send_account_id"`
 	ScriptName        string   `json:"script_name"`
 	Content           string   `json:"content"`
+	AccountConfig     string   `json:"account_config"`
 }
 
 type MessageTypeSmsConfig struct {
