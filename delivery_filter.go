@@ -12,15 +12,15 @@ import (
 	"gorm.io/gorm"
 )
 
-// 前置检查
+/*
+前置检查
+ 1. 没有传入 消息模板Id 或者 messageParam
+ 2. 空的receiver
+ 3. receiver 大于100的请求
+*/
 var preCheck pipeline.Filter[*Delivery] = func(next pipeline.HandlerFunc[*Delivery]) pipeline.HandlerFunc[*Delivery] {
 	return func(ctx context.Context, deli *Delivery) error {
 		fmt.Println("pre check begin")
-		/*
-			1. 没有传入 消息模板Id 或者 messageParam
-			2. 空的receiver
-			3. receiver 大于100的请求
-		*/
 		err := next(ctx, deli)
 		fmt.Println("pre check end")
 		return err
@@ -70,13 +70,14 @@ func (af *AssembleFilterBuilder) Build() pipeline.Filter[*Delivery] {
 	}
 }
 
-// 后置检查
+/*
+后置检查
+ 1. 利用正则过滤掉不合法的接收者
+*/
 var afterCheck pipeline.Filter[*Delivery] = func(next pipeline.HandlerFunc[*Delivery]) pipeline.HandlerFunc[*Delivery] {
 	return func(ctx context.Context, deli *Delivery) error {
 		fmt.Println("after check begin")
-		/*
-			1. 利用正则过滤掉不合法的接收者
-		*/
+
 		err := next(ctx, deli)
 		fmt.Println("after check end")
 		return err
