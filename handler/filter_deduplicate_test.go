@@ -2,73 +2,83 @@ package handler
 
 import (
 	"context"
-	"fmt"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
 	"github.com/ecodeclub/notify-go/common/domain"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
-func TestRds(t *testing.T) {
-	rds := redis.NewClient(&redis.Options{
-		Addr:     "127.0.0.1:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
-
-	rds.FlushDB(context.Background())
-	rds.Set(context.Background(), "key1", "val1", 0)
-	rds.Set(context.Background(), "key2", "val2", 0)
-	res := rds.MGet(context.TODO(), "key1", "key2", "key3").Val()
-	fmt.Printf("%+v\n", res)
-	fmt.Println(res[2] == nil)
-}
-
 func TestDuplicateService_duplicate(t *testing.T) {
-	configs := map[string]deduplicateConfig{
-		"deduplication_10": {
-			Num: 5,
-		},
-		"deduplication_20": {
-			Num:  1,
-			Time: 300,
-		},
-	}
-
-	rds := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-
+	mockRds := miniredis.RunT(t)
+	rds := redis.NewClient(&redis.Options{Addr: mockRds.Addr()})
 	tests := []struct {
-		name         string
-		taskInfo     *domain.TaskInfo
-		config       deduplicateConfig
-		wantErr      error
-		wantReceiver []string
+		name        string
+		taskInfo    *domain.TaskInfo
+		strategyArr []deduplicationStrategy
+		wantErr     error
 	}{
 		{
-			name: "test1",
+			name: "同一用户同渠道5min内超过3次发送",
 			taskInfo: &domain.TaskInfo{
 				MessageTemplateId: 111111,
 				SendChannel:       10,
-				Receiver: []string{
-					"123",
-				},
+				Receiver:          []string{"123"},
 			},
-			config:  configs["deduplication_10"],
-			wantErr: nil,
-			wantReceiver: []string{
-				"123",
-			},
+			strategyArr: []deduplicationStrategy{{Num: 3, Time: 300, DeduplicationKey: FrequencyDeduplicationKey{}}},
+			wantErr:     nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ds := DuplicateService{
+			ds := DuplicationService{
 				rds:    rds,
-				config: configs,
+				config: tt.strategyArr,
 			}
-			err := ds.duplicate(context.TODO(), tt.taskInfo)
+
+			var err error
+			taskInfo1 := *tt.taskInfo
+			taskInfo2 := *tt.taskInfo
+			taskInfo3 := *tt.taskInfo
+			taskInfo4 := *tt.taskInfo
+
+			// 第1次发送
+			err = duplicationN(1, ds, &taskInfo1)
 			assert.Equal(t, tt.wantErr, err)
-			assert.Equal(t, tt.wantReceiver, tt.taskInfo.Receiver)
+			mockRds.CheckGet(t, tt.strategyArr[0].Key(taskInfo1.Receiver[0], taskInfo1), "1")
+			assert.Equal(t, 1, len(taskInfo1.Receiver))
+
+			// 刚好第n次发送
+			err = duplicationN(tt.strategyArr[0].Num, ds, &taskInfo2)
+			assert.Equal(t, tt.wantErr, err)
+			mockRds.CheckGet(t, tt.strategyArr[0].Key(taskInfo1.Receiver[0], taskInfo1), strconv.Itoa(tt.strategyArr[0].Num))
+			assert.Equal(t, 0, len(taskInfo2.Receiver))
+
+			// 第n+100次发送
+			err = duplicationN(tt.strategyArr[0].Num+100, ds, &taskInfo3)
+			assert.Equal(t, tt.wantErr, err)
+			mockRds.CheckGet(t, tt.strategyArr[0].Key(taskInfo1.Receiver[0], taskInfo1), strconv.Itoa(tt.strategyArr[0].Num))
+			assert.Equal(t, 0, len(taskInfo3.Receiver))
+
+			// 超过过期时间发送
+			mockRds.FastForward(time.Duration(tt.strategyArr[0].Time) * time.Second)
+			err = duplicationN(tt.strategyArr[0].Num-1, ds, &taskInfo4)
+			assert.Equal(t, tt.wantErr, err)
+			mockRds.CheckGet(t, tt.strategyArr[0].Key(taskInfo1.Receiver[0], taskInfo1), strconv.Itoa(tt.strategyArr[0].Num-1))
+			assert.Equal(t, 1, len(taskInfo4.Receiver))
 		})
 	}
+}
+
+func duplicationN(n int, ds DuplicationService, taskInfo *domain.TaskInfo) (err error) {
+	for i := 0; i < n; i++ {
+		err = ds.duplicate(context.TODO(), taskInfo)
+		if err != nil {
+			return
+		}
+	}
+	return
 }
