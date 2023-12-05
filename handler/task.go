@@ -26,16 +26,9 @@ func NewTaskExecutor(size int) *TaskExecutor {
 
 func (te *TaskExecutor) run(info *domain.TaskInfo) error {
 	ctx := context.TODO()
-	//processController := pipeline.NewPipelineController[*domain.TaskInfo](
-	//	"task",
-	//	&DiscardFilter{},
-	//	&SendMessageFilter{},
-	//)
-	//err := processController.Process(ctx, info)
-
 	send := NewSendMsgHandlerBuilder().Build()
 	processPipeline := pipeline.FilterChain[*domain.TaskInfo](
-		NewDiscardFilterBuilder().Build(),
+		NewDiscardFilterBuilder([]int{1111, 2222}).Build(),
 	).Then(send)
 
 	err := processPipeline(ctx, info)

@@ -10,7 +10,7 @@ import (
 )
 
 type DiscardFilterBuilder struct {
-	discardMessageIds []int
+	discardMessageIds []int // TODO 配置文件读取
 }
 
 func NewDiscardFilterBuilder(discardMessageIds []int) *DiscardFilterBuilder {
